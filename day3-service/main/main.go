@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"geerpc"
 	"log"
 	"net"
@@ -9,7 +8,21 @@ import (
 	"time"
 )
 
+type Foo int
+
+type Args struct{ Num1, Num2 int }
+
+func (f Foo) Sum(args Args, reply *int) error {
+	*reply = args.Num1 + args.Num2
+	return nil
+}
+
 func startServer(addr chan string) {
+	var foo Foo
+	if err := geerpc.Register(&foo); err != nil {
+		log.Fatal("register error:", err)
+	}
+
 	// pick a free port
 	l, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -23,17 +36,13 @@ func startServer(addr chan string) {
 /*
 output:
 
-start rpc server on [::]:33149
-&{Foo.Sum 5 } geerpc req 2
-&{Foo.Sum 2 } geerpc req 1
-&{Foo.Sum 3 } geerpc req 0
-&{Foo.Sum 4 } geerpc req 3
-reply: geerpc response 4
-reply: geerpc response 5
-reply: geerpc response 2
-reply: geerpc response 3
-&{Foo.Sum 1 } geerpc req 4
-reply: geerpc response 1
+	rpc server: register Foo.Sum
+	start rpc server on [::]:36807
+	3 + 9 = 12
+	2 + 4 = 6
+	1 + 1 = 2
+	0 + 0 = 0
+	4 + 16 = 20
 */
 func main() {
 	log.SetFlags(0)
@@ -52,13 +61,16 @@ func main() {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			args := fmt.Sprintf("geerpc req %d", i)
-			var reply string
+			args := &Args{
+				Num1: i,
+				Num2: i * i,
+			}
+			var reply int
 			if err := client.Call("Foo.Sum", args, &reply); err != nil {
 				log.Fatal("call Foo.Sum error:", err)
 			}
 
-			log.Println("reply:", reply)
+			log.Printf("%d + %d = %d", args.Num1, args.Num2, reply)
 		}(i)
 	}
 	wg.Wait()
